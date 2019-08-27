@@ -12,7 +12,8 @@
                 "${file}",
                 "-o",
                 "${fileDirname}/${fileBasenameNoExtension}",
-                "-lpcap"
+                "-lpcap",
+                "-Wpointer-arith"
             ],
             "options": {
                 "cwd": "/usr/bin"
