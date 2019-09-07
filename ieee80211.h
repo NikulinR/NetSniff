@@ -9,6 +9,7 @@
 #include <net/ethernet.h>
 //#include <ipxe/if_ether.h>      /* for ETH_ALEN */
 #include <endian.h>
+#include <bitset>
 
 /** @file
  * Constants and data structures defined in IEEE 802.11, subsetted
@@ -302,8 +303,24 @@
  */
 
 /** An 802.11 data or management frame without QoS or WDS header fields */
+/*struct frame_control{
+        std::bitset<2> protocol;
+        std::bitset<2> type;
+        std::bitset<4> subtype;
+        
+        std::bitset<1> toDS;
+        std::bitset<1> fromDS;
+        std::bitset<1> moreFrag;
+        std::bitset<1> retry;
+        std::bitset<1> pwr_mgmt;
+        std::bitset<1> moreData;
+        std::bitset<1> protectedFrame;
+        std::bitset<1> order;
+};*/
+
 struct ieee80211_frame
 {
+        //struct frame_control fc;
         u16 fc;                 /**< 802.11 Frame Control field */
         u16 duration;           /**< Microseconds to reserve link */
         u8 addr1[ETH_ALEN];     /**< Address 1 (immediate receiver) */
@@ -978,9 +995,12 @@ union ieee80211_ie
 {
         /** Generic and simple information element info */
         struct {
+                
+                
                 u8 id;          /**< Information element ID */
                 u8 len;         /**< Information element data length */
                 union {
+                        //struct ieee80211_ie_ssid ssid;
                         char ssid[0];   /**< SSID text */
                         u8 rates[0];    /**< Rates data */
                         u8 request[0];  /**< Request list */
