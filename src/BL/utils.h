@@ -6,10 +6,11 @@
 
 #include <pcap.h>
 #include <termios.h> 
+#include <sys/ioctl.h>
 
 using namespace std;
 
-char getch() {
+char my_getch() {
     char buf = 0;
     struct termios old = { 0 };
     fflush(stdout);
@@ -25,3 +26,22 @@ char getch() {
     if (tcsetattr(0, TCSADRAIN, &old) < 0) perror ("tcsetattr ~ICANON");
     return buf;
  }
+
+int _kbhit() {
+    static const int STDIN = 0;
+    static bool initialized = false;
+
+    if (! initialized) {
+        // Use termios to turn off line buffering
+        termios term;
+        tcgetattr(STDIN, &term);
+        term.c_lflag &= ~ICANON;
+        tcsetattr(STDIN, TCSANOW, &term);
+        setbuf(stdin, NULL);
+        initialized = true;
+    }
+
+    int bytesWaiting;
+    ioctl(STDIN, FIONREAD, &bytesWaiting);
+    return bytesWaiting;
+}

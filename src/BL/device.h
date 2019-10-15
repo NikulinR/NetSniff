@@ -8,6 +8,7 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <ncurses.h>
 
 #include "radiotap.h"
 #include "network.h"
@@ -36,6 +37,7 @@ private:
     int getDevCount(pcap_if_t devs);
     void getDevListNames(pcap_if_t *devs);
     const u_char *next_packet_timed();
+    
 
 public:
     device();
@@ -135,12 +137,14 @@ const u_char *device::next_packet_timed()
 
     {
         std::unique_lock<std::mutex> l(m);
-        if(cv.wait_for(l, 500ms) == std::cv_status::timeout) 
+        if(cv.wait_for(l, 600ms) == std::cv_status::timeout) 
             throw std::runtime_error("Timeout");
     }
 
     return retValue;    
 }
+
+
 
 void device::searchAP(){
     activateDev();
@@ -160,14 +164,38 @@ void device::searchAP(){
     int counter = 0;
 
     const u_char *packet;
+
+    initscr();
+    timeout(1);
+    keypad(stdscr, true); 
+
     while(!choosen){
-        printf("\nCHANNEL - %d\n",channel);
+        
         if(counter>3){
             counter = 0;            
             nextchannel = nextchannel % 12 + 5;
             changeChannel(nextchannel);
         }
         choosingAP.render_menu();
+         
+        
+        switch (getch())
+        {
+        case KEY_UP:
+            if(choosingAP.choosen>0) choosingAP.choosen--;
+            break;
+        case KEY_DOWN:
+            if(choosingAP.choosen<choosingAP.args.size()-1) choosingAP.choosen++;
+            break;
+        case 10:
+            choosen = true;
+            break;
+        default:
+            break;
+        } 
+        
+        printf("CHANNEL - %d",channel);
+        
 
         //           !!!If can't capture packet in 2seconds, change channel!!!
         try
@@ -181,8 +209,6 @@ void device::searchAP(){
             changeChannel(nextchannel);
             continue;
         }
-        
-        
 
         ieee80211_frame* mac_header = (struct ieee80211_frame *)(packet+24);
         ieee80211_beacon_or_probe_resp* beacon = (struct ieee80211_beacon_or_probe_resp*)(packet + 24 + 24);
@@ -197,7 +223,7 @@ void device::searchAP(){
             
         }   
         else {counter++;} 
-        
-    
     }    
+    endwin();
+    printf("%s",choosingAP.args[choosingAP.choosen].c_str());
 }

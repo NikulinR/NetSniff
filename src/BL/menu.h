@@ -1,4 +1,3 @@
-
 #include <stdlib.h>
 #include <string>
 #include <vector>
@@ -16,9 +15,9 @@
 #define KMAG "\x1B[35m"
 #define KCYN "\x1B[36m"
 
-#define KEY_UP 65
+/*#define KEY_UP 65
 #define KEY_DOWN 66
-#define KEY_ENTER 10
+#define KEY_ENTER 10*/
 
 using namespace std;
 
@@ -31,6 +30,7 @@ private:
     string desc;
     bool isFinalized;
     int get_str_list_size(string arr);
+    
 
 public:
     menu(vector<string> args, string desc);
@@ -41,7 +41,8 @@ public:
     
     void render_menu();
     void add_option(string arg);
-    string listen(bool started);    
+    string listen(bool started);   
+    void getch_rec(char* value); 
 };
 
 menu::menu(vector<string> args, string desc = "")
@@ -57,7 +58,7 @@ menu::~menu()
     //delete[] args;
 }
 
-void menu::render_menu(){
+/*void menu::render_menu(){
     printf("============================\n");
     printf(KGRN);
     printf("%s\n",menu::desc.c_str());
@@ -70,15 +71,18 @@ void menu::render_menu(){
         printf(KNRM);
     }   
     printf("============================\n");
-}
+}*/
 
-string menu::listen(bool started = true){
-    char i_input = 0;
+
+
+/*string menu::listen_old(bool started = true){
+    int i_input = 0;
     if(started){
         menu::render_menu();
         started = false;
     }
     i_input = getch();
+    printf("%d",i_input);
     system("clear"); 
     switch (i_input)
     {
@@ -100,6 +104,60 @@ string menu::listen(bool started = true){
         return menu::listen(started);
         break;
     } 
+}*/
+
+void menu::render_menu(){
+
+    system("clear");
+    
+    printf("============================\n");
+    printf(KGRN);
+    printf("%s\n",menu::desc.c_str());
+    printf(KNRM);
+    printf("============================\n");
+    for (size_t i = 0; i < menu::args.size(); i++)
+    {
+        i==menu::choosen ? printf(KCYN "(*)") : printf("( )");
+        printf(" %s\n", menu::args[i].c_str());
+        printf(KNRM);
+    }   
+    printf("============================\n");
+}
+
+string menu::listen(bool started = true){
+    bool done = false;
+    int i_input = 0;
+    initscr();
+    timeout(600);
+    keypad(stdscr, true); 
+    while(!done){    
+        menu::render_menu();  
+
+        
+        i_input = getch();
+        
+
+        switch (i_input)
+        {
+        case KEY_UP:
+            if(menu::choosen>0) menu::choosen--;
+            break;
+
+        case KEY_DOWN:
+            if(menu::choosen<menu::args.size()-1) menu::choosen++;
+            break;
+
+        case 10:
+            done = true;
+            break;
+        
+        default:
+            break;
+        } 
+         
+    }
+    endwin();
+    return menu::args[menu::choosen];
 }
 
 void menu::add_option(string arg){
@@ -115,3 +173,4 @@ void menu::add_option(string arg){
     
     
 }
+

@@ -11,9 +11,11 @@
                 "-g",
                 "${file}",
                 "-o",
-                "${fileDirname}/${fileBasenameNoExtension}",
+                "${workspaceFolder}/bin/Debug/main",
                 "-lpcap",
-                "-Wpointer-arith"
+                "-Wpointer-arith",
+                "-pthread",
+                "-lncurses"
             ],
             "options": {
                 "cwd": "/usr/bin"
