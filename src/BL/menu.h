@@ -58,70 +58,31 @@ menu::~menu()
     //delete[] args;
 }
 
-/*void menu::render_menu(){
-    printf("============================\n");
-    printf(KGRN);
-    printf("%s\n",menu::desc.c_str());
-    printf(KNRM);
-    printf("============================\n");
-    for (size_t i = 0; i < menu::args.size(); i++)
-    {
-        i==menu::choosen ? printf(KCYN "(*)") : printf("( )");
-        printf(" %s\n", menu::args[i].c_str());
-        printf(KNRM);
-    }   
-    printf("============================\n");
-}*/
-
-
-
-/*string menu::listen_old(bool started = true){
-    int i_input = 0;
-    if(started){
-        menu::render_menu();
-        started = false;
-    }
-    i_input = getch();
-    printf("%d",i_input);
-    system("clear"); 
-    switch (i_input)
-    {
-    case KEY_UP:
-        if(menu::choosen>0) menu::choosen--;
-        menu::render_menu();
-        return menu::listen(started);
-        break;
-    case KEY_DOWN:
-        if(menu::choosen<menu::args.size()-1) menu::choosen++;
-        menu::render_menu();
-        return menu::listen(started);
-        break;
-    case KEY_ENTER:
-        return menu::args[menu::choosen];
-        break;
-    default:
-        menu::render_menu();
-        return menu::listen(started);
-        break;
-    } 
-}*/
-
 void menu::render_menu(){
-
-    system("clear");
-    
-    printf("============================\n");
-    printf(KGRN);
-    printf("%s\n",menu::desc.c_str());
-    printf(KNRM);
-    printf("============================\n");
+    clear();
+    start_color();
+    init_pair(2, COLOR_GREEN, COLOR_BLACK);
+    init_pair(1, COLOR_WHITE, COLOR_BLACK);
+    init_pair(3, COLOR_CYAN, COLOR_BLACK);
+    printw("============================\n");
+    attron(COLOR_PAIR(2));
+    printw("%s\n",menu::desc.c_str());
+    attron(COLOR_PAIR(1));
+    printw("============================\n");
     for (size_t i = 0; i < menu::args.size(); i++)
     {
-        i==menu::choosen ? printf(KCYN "(*)") : printf("( )");
-        printf(" %s\n", menu::args[i].c_str());
-        printf(KNRM);
+        if (i==menu::choosen){
+            attron(COLOR_PAIR(3));
+            printw("(*)");
+        } 
+        else{
+            printw("( )");
+        }
+        printw("%s\n", menu::args[i].c_str());
+        attron(COLOR_PAIR(1));
     }   
-    printf("============================\n");
+    printw("============================\n");
+    refresh();
 }
 
 string menu::listen(bool started = true){
@@ -133,10 +94,7 @@ string menu::listen(bool started = true){
     while(!done){    
         menu::render_menu();  
 
-        
         i_input = getch();
-        
-
         switch (i_input)
         {
         case KEY_UP:
@@ -156,6 +114,7 @@ string menu::listen(bool started = true){
         } 
          
     }
+    refresh(); clear();
     endwin();
     return menu::args[menu::choosen];
 }

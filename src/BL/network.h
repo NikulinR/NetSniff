@@ -14,6 +14,7 @@ private:
     char *errbuf = new char[PCAP_ERRBUF_SIZE];
 public:
     network(string ssid, __u8 *bssid, char channel);
+    network();
     ~network();
     
     string get_ssid(){return ssid;};
@@ -37,6 +38,10 @@ network::network(string ssid, __u8 *bssid, char channel)
     network::channel = channel;
 }
 
+network::network()
+{
+}
+
 network::~network()
 {
 }
@@ -46,7 +51,7 @@ string network::get_bssid(){
     char buf[19];
     int isDone = snprintf(buf, 
                        sizeof(buf), 
-                       "%02x:%02x:%02x:%02x:%02x:%02x\n",
+                       "%02x:%02x:%02x:%02x:%02x:%02x",
                        (unsigned char) bssid[0],
                        (unsigned char) bssid[1],
                        (unsigned char) bssid[2],

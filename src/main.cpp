@@ -13,12 +13,7 @@ int main(int argc, char const *argv[])
     ===================================================*/
     device DevHandler = device();
     DevHandler.searchAP();
-    printf("You choosed %s",DevHandler.getDevice().c_str());
 
-
-
+    
     return 0;
 } 
-
-
-

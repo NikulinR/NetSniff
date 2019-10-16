@@ -31,6 +31,7 @@ private:
     vector<network> APs; 
     string current_ssid;
     vector<string> APs_SSIDs;
+   
     int devCount;
     char *errbuf = new char[PCAP_ERRBUF_SIZE];
     
@@ -42,7 +43,7 @@ private:
 public:
     device();
     ~device();
-
+    network choosed;
     vector<string> getDevs() {return available;}
     int getDevCount(){return devCount;}
     string getDevice(){return name;}
@@ -166,11 +167,10 @@ void device::searchAP(){
     const u_char *packet;
 
     initscr();
-    timeout(1);
+    timeout(30);
     keypad(stdscr, true); 
 
     while(!choosen){
-        
         if(counter>3){
             counter = 0;            
             nextchannel = nextchannel % 12 + 5;
@@ -194,7 +194,7 @@ void device::searchAP(){
             break;
         } 
         
-        printf("CHANNEL - %d",channel);
+        printw("CHANNEL - %d",channel);
         
 
         //           !!!If can't capture packet in 2seconds, change channel!!!
@@ -224,6 +224,21 @@ void device::searchAP(){
         }   
         else {counter++;} 
     }    
+    
+    for (size_t i = 0; i < APs.size(); i++)
+    {
+        if(APs[i].get_ssid() == choosingAP.args[choosingAP.choosen]){
+            device::choosed = APs[i];
+        }
+    }
+    clear();
+
+    refresh(); 
     endwin();
-    printf("%s",choosingAP.args[choosingAP.choosen].c_str());
+    printw("==CHOOSEN== \nSSID - %s\nMAC - %s\nCHANNEL - %d\n",
+        choosed.get_ssid().c_str(),
+        choosed.get_bssid().c_str(),
+        choosed.get_channel());
+    printw("On %s\n",getDevice().c_str());
+    refresh();
 }
