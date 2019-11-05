@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "utils.h"
-
+#include <ncurses.h>
 #include <stdlib.h>
 #include <string>
 
@@ -129,7 +129,5 @@ void menu::add_option(string arg){
     if(!found){
         args.insert(args.end(),arg);
     }
-    
-    
 }
 

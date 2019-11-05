@@ -10,6 +10,7 @@ class network
 private:
     string ssid;
     __u8 *bssid;
+    string bssid_str;
     int channel;
     char *errbuf = new char[PCAP_ERRBUF_SIZE];
 public:
@@ -18,7 +19,8 @@ public:
     ~network();
     
     string get_ssid(){return ssid;};
-    string get_bssid();
+    string get_bssid(){return bssid_str;};
+    string get_bssid_f();
     void get_bssid_raw(__u8[]);
     int get_channel(){return channel;};
     
@@ -26,9 +28,6 @@ public:
     void set_bssid(string bssid);
     void set_bssid_raw(__u8[]);
     void set_channel(int channel);
-
-    void copmare_ssid_to_bssid();
-    void translate();
 };
 
 network::network(string ssid, __u8 *bssid, char channel)
@@ -36,6 +35,7 @@ network::network(string ssid, __u8 *bssid, char channel)
     network::ssid = ssid;
     network::bssid = bssid;
     network::channel = channel;
+    network::bssid_str = get_bssid_f();
 }
 
 network::network()
@@ -46,7 +46,7 @@ network::~network()
 {
 }
 
-string network::get_bssid(){
+string network::get_bssid_f(){
     string res;
     char buf[19];
     int isDone = snprintf(buf, 
@@ -61,5 +61,3 @@ string network::get_bssid(){
     res = buf;
     return res;
 }
-
-    

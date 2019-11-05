@@ -55,6 +55,7 @@
         "cinttypes": "cpp",
         "typeinfo": "cpp",
         "valarray": "cpp",
-        "bitset": "cpp"
+        "bitset": "cpp",
+        "variant": "cpp"
     }
 }

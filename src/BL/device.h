@@ -13,6 +13,7 @@
 #include "radiotap.h"
 #include "network.h"
 #include "menu.h"
+#include "utils.h"
 
 using namespace std;
 using namespace std::chrono_literals;
@@ -37,6 +38,7 @@ private:
     
     int getDevCount(pcap_if_t devs);
     void getDevListNames(pcap_if_t *devs);
+
     const u_char *next_packet_timed();
     
 
@@ -50,13 +52,19 @@ public:
 
     void setDevice(string dev){name = dev;}
 
+    void searchDevs();
     void activateDev();
     void searchAP();
     string *getAPs();
     void changeChannel(int ch);
+    void getAP(string ssid);
+
+
+    void copmare_ssid_to_bssid();
+    void translate();
 };
 
-device::device()
+void device::searchDevs()
 {
     pcap_findalldevs(&pcap_dev, errbuf);
     devCount = getDevCount(*pcap_dev);
@@ -64,12 +72,41 @@ device::device()
     
     menu dev_menu = menu(available, "Please choose target device:");
     name = dev_menu.listen();
-    
+}
+
+device::device(){
+
 }
 
 device::~device()
 {
     
+}
+
+
+const u_char *device::next_packet_timed()
+{
+    std::mutex m;
+    std::condition_variable cv;
+    const u_char *retValue;
+    pcap_t *handle_t = handle;
+    pcap_pkthdr header_t= header;
+
+    std::thread t([&cv, &retValue, &handle_t, &header_t]() 
+    {
+        retValue = pcap_next(handle_t, &header_t);
+        cv.notify_one();
+    });
+
+    t.detach();
+
+    {
+        std::unique_lock<std::mutex> l(m);
+        if(cv.wait_for(l, 900ms) == std::cv_status::timeout) 
+            throw std::runtime_error("Timeout");
+    }
+
+    return retValue;    
 }
 
 
@@ -110,8 +147,8 @@ void device::changeChannel(int ch){
         ch = ch % 12;
         if(ch == 0) ch = 1;
 
-        char bufdown[100];
-        char bufup[100];
+        char bufdown[60];
+        char bufup[60];
         int isDone = snprintf(bufdown, 
                         sizeof(bufdown), 
                         "sudo iw dev %s set channel %d",
@@ -120,37 +157,72 @@ void device::changeChannel(int ch){
         channel = ch;    
 }
 
-const u_char *device::next_packet_timed()
-{
-    std::mutex m;
-    std::condition_variable cv;
-    const u_char *retValue;
-    pcap_t *handle_t = handle;
-    pcap_pkthdr header_t= header;
 
-    std::thread t([&cv, &retValue, &handle_t, &header_t]() 
-    {
-        retValue = pcap_next(handle_t, &header_t);
-        cv.notify_one();
-    });
-
-    t.detach();
-
-    {
-        std::unique_lock<std::mutex> l(m);
-        if(cv.wait_for(l, 600ms) == std::cv_status::timeout) 
-            throw std::runtime_error("Timeout");
+void device::getAP(string ssid_in){
+    activateDev();
+    if (pcap_compile(handle, &fp, "type mgt subtype beacon", 0, PCAP_NETMASK_UNKNOWN)==-1){
+        printf("%s",pcap_geterr(handle));
     }
+    if (pcap_setfilter(handle, &fp)==-1){
+        printf("%s",pcap_geterr(handle));
+    }
+    bool choosen = false;
+    bool first_time = true;
+    int nextchannel = channel;
 
-    return retValue;    
+    int counter = 0;
+
+    const u_char *packet;
+
+    while(!choosen){
+        if(counter>3){
+            counter = 0;            
+            nextchannel = nextchannel % 12 + 5;
+            changeChannel(nextchannel);
+        }
+        
+
+        //           !!!If can't capture packet in 2seconds, change channel!!!
+        try
+        {
+            packet = next_packet_timed();
+        }
+        catch(const std::exception& e)
+        {
+            counter = 0;            
+            nextchannel = nextchannel % 12 + 5;
+            changeChannel(nextchannel);
+            continue;
+        }
+
+        ieee80211_frame* mac_header = (struct ieee80211_frame *)(packet+24);
+        ieee80211_beacon_or_probe_resp* beacon = (struct ieee80211_beacon_or_probe_resp*)(packet + 24 + 24);
+        
+        u8 ssid_len = beacon->info_element->len;
+        std::string ssid(beacon->info_element->ssid);
+        ssid = ssid.substr(0,ssid_len);
+        if(ssid_in == ssid){
+            device::choosed = network(ssid, mac_header->addr3, channel);          
+        }   
+        else {counter++;} 
+    }    
+    
+    clear();
+
+    refresh(); 
+    endwin();
+    printw("==CHOOSEN== \nSSID - %s\nMAC - %s\nCHANNEL - %d\n",
+        choosed.get_ssid().c_str(),
+        choosed.get_bssid().c_str(),
+        choosed.get_channel());
+    printw("On %s\n",getDevice().c_str());
+    refresh();
 }
-
-
 
 void device::searchAP(){
     activateDev();
     
-    if (pcap_compile(handle, &fp, "type mgt subtype beacon", 0, PCAP_NETMASK_UNKNOWN)==-1){
+    if (pcap_compile(handle, &fp, "subtype beacon", 0, PCAP_NETMASK_UNKNOWN)==-1){
         printf("%s",pcap_geterr(handle));
     }
     if (pcap_setfilter(handle, &fp)==-1){
@@ -171,7 +243,7 @@ void device::searchAP(){
     keypad(stdscr, true); 
 
     while(!choosen){
-        if(counter>3){
+        if(counter>10){
             counter = 0;            
             nextchannel = nextchannel % 12 + 5;
             changeChannel(nextchannel);
@@ -195,9 +267,8 @@ void device::searchAP(){
         } 
         
         printw("CHANNEL - %d",channel);
-        
+        refresh();
 
-        //           !!!If can't capture packet in 2seconds, change channel!!!
         try
         {
             packet = next_packet_timed();
@@ -213,6 +284,7 @@ void device::searchAP(){
         ieee80211_frame* mac_header = (struct ieee80211_frame *)(packet+24);
         ieee80211_beacon_or_probe_resp* beacon = (struct ieee80211_beacon_or_probe_resp*)(packet + 24 + 24);
         
+        refresh(); 
         u8 ssid_len = beacon->info_element->len;
         std::string ssid(beacon->info_element->ssid);
         ssid = ssid.substr(0,ssid_len);
@@ -242,3 +314,5 @@ void device::searchAP(){
     printw("On %s\n",getDevice().c_str());
     refresh();
 }
+
+
