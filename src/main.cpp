@@ -1,4 +1,4 @@
-#include "./BL/device.h"
+#include "./BL/translator.h"
 
 #include <string>
 
@@ -12,25 +12,11 @@ int main(int argc, char const *argv[])
     /*
     проверить ловятся ли beaconы
     при получении ssid 
-        фиксировать канал 
-        менять фильтр
         проверять mac-SSID
     */
-    device DevHandler = device();
-    if(argc==2){
-        //при запуске передан интерфейс
-        DevHandler.setDevice(std::string(argv[1]));
-        DevHandler.searchAP();
-    }
-    else if(argc==3){
-        //при запуске передан интерфейс и ssid
-        DevHandler.setDevice(std::string(argv[1]));
-        DevHandler.getAP(std::string(argv[2]));
-    }
-    else{
-        DevHandler.searchDevs();
-        DevHandler.searchAP();
-    }
+    
+    //выбор интерфейса и целевого ssid
+    translator trans = translator(argc, argv);
     //начать трансляцию
     
     return 0;

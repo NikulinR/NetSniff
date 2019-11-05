@@ -2,7 +2,6 @@
 #include <string>
 #include <vector>
 
-#include "utils.h"
 #include <ncurses.h>
 #include <stdlib.h>
 #include <string>

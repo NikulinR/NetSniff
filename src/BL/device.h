@@ -13,7 +13,6 @@
 #include "radiotap.h"
 #include "network.h"
 #include "menu.h"
-#include "utils.h"
 
 using namespace std;
 using namespace std::chrono_literals;
@@ -37,10 +36,7 @@ private:
     char *errbuf = new char[PCAP_ERRBUF_SIZE];
     
     int getDevCount(pcap_if_t devs);
-    void getDevListNames(pcap_if_t *devs);
-
-    const u_char *next_packet_timed();
-    
+    void getDevListNames(pcap_if_t *devs);    
 
 public:
     device();
@@ -49,7 +45,7 @@ public:
     vector<string> getDevs() {return available;}
     int getDevCount(){return devCount;}
     string getDevice(){return name;}
-
+    pcap_t *gethandle(){return handle;}
     void setDevice(string dev){name = dev;}
 
     void searchDevs();
@@ -59,6 +55,8 @@ public:
     void changeChannel(int ch);
     void getAP(string ssid);
 
+    const u_char* next_packet(){return pcap_next(handle, &header);}
+    const u_char* next_packet_timed();
 
     void copmare_ssid_to_bssid();
     void translate();
@@ -108,6 +106,7 @@ const u_char *device::next_packet_timed()
 
     return retValue;    
 }
+
 
 
 int device::getDevCount(pcap_if_t devs){
