@@ -13,7 +13,7 @@ int main(int argc, char const *argv[])
     проверить ловятся ли beaconы
     при получении ssid 
         проверять mac-SSID
-    */
+    */ 
     
     //выбор интерфейса и целевого ssid
     translator trans = translator(argc, argv);

@@ -170,7 +170,7 @@ void device::changeChannel(int ch){
                         sizeof(bufdown), 
                         "sudo iw dev %s set channel %d",
                         name.c_str(), ch); 
-        printw("%s\n",bufdown);
+        printf("%s\n\r",bufdown);
         if (system(bufdown)){
             changeChannel(ch);
         }
@@ -310,7 +310,10 @@ void device::searchAP(){
         ieee80211_beacon_or_probe_resp* beacon = (struct ieee80211_beacon_or_probe_resp*)(packet + 24 + 24);
         
         refresh(); 
+
         u8 ssid_len = beacon->info_element->len;
+        
+        
         std::string ssid(beacon->info_element->ssid);
         ssid = ssid.substr(0,ssid_len);
         choosingAP.add_option(ssid);
@@ -333,12 +336,12 @@ void device::searchAP(){
 
     refresh(); 
     endwin();
-    printw("==CHOOSEN== \nSSID - %s\nMAC - %s\nCHANNEL - %d\n",
+    printf("==CHOOSEN== \r\nSSID - %s\r\nMAC - %s\r\nCHANNEL - %d\r\n",
         choosed.get_ssid().c_str(),
         choosed.get_bssid().c_str(),
         choosed.get_channel());
-    printw("On %s\n",getDevice().c_str());
-    refresh();
+    printf("On %s\r\n",getDevice().c_str());
+    //refresh();
 }
 
 
