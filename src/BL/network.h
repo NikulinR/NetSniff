@@ -27,7 +27,7 @@ public:
     void set_ssid(string ssid);
     void set_bssid(string bssid);
     void set_bssid_raw(__u8[]);
-    void set_channel(int channel);
+    void set_channel(int channel){network::channel = channel;};
 };
 
 network::network(string ssid, __u8 *bssid, char channel)

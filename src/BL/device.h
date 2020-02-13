@@ -14,6 +14,9 @@
 #include "network.h"
 #include "menu.h"
 
+#define IDLE_TIME 600ms
+#define REP_COUNT 5
+
 using namespace std;
 using namespace std::chrono_literals;
 
@@ -42,21 +45,25 @@ public:
     device();
     ~device();
     network choosed;
+    
+    int getChannel(){return channel;}
     vector<string> getDevs() {return available;}
     int getDevCount(){return devCount;}
     string getDevice(){return name;}
     pcap_t *gethandle(){return handle;}
+    pcap_pkthdr *getHeader(){return &header;};
     void setDevice(string dev){name = dev;}
 
     void searchDevs();
     void activateDev();
+    void shutdownDev();
     void searchAP();
     string *getAPs();
     void changeChannel(int ch);
     void getAP(string ssid);
 
     const u_char* next_packet(){return pcap_next(handle, &header);}
-    const u_char* next_packet_timed();
+    const u_char* next_packet_timed(pcap_t *handle_t, pcap_pkthdr header_t);
 
     void copmare_ssid_to_bssid();
     void translate();
@@ -82,13 +89,11 @@ device::~device()
 }
 
 
-const u_char *device::next_packet_timed()
+const u_char *device::next_packet_timed(pcap_t *handle_t, pcap_pkthdr header_t)
 {
     std::mutex m;
     std::condition_variable cv;
     const u_char *retValue;
-    pcap_t *handle_t = handle;
-    pcap_pkthdr header_t= header;
 
     std::thread t([&cv, &retValue, &handle_t, &header_t]() 
     {
@@ -100,7 +105,7 @@ const u_char *device::next_packet_timed()
 
     {
         std::unique_lock<std::mutex> l(m);
-        if(cv.wait_for(l, 900ms) == std::cv_status::timeout) 
+        if(cv.wait_for(l, IDLE_TIME) == std::cv_status::timeout) 
             throw std::runtime_error("Timeout");
     }
 
@@ -131,7 +136,20 @@ void device::getDevListNames(pcap_if_t *devs)
     }
 }
 
+void device::shutdownDev(){
+    printf("closed");
+    pcap_close(handle);
+}
+
 void device::activateDev(){
+    char bufdown[200];
+    int isDone = snprintf(bufdown, 
+                    sizeof(bufdown), 
+                    "sudo ip link set %s down & sudo iw dev %s set monitor control & sudo ip link set %s up",
+                    name.c_str(),name.c_str(),name.c_str()); 
+    printf("%s\n",bufdown);
+    system(bufdown);
+
     handle = pcap_create(name.c_str(), errbuf);
     pcap_set_rfmon(handle, 1);
 	pcap_set_promisc(handle, 1); /* Capture packets that are not yours */
@@ -151,8 +169,12 @@ void device::changeChannel(int ch){
         int isDone = snprintf(bufdown, 
                         sizeof(bufdown), 
                         "sudo iw dev %s set channel %d",
-                        name.c_str(), ch);  
-        system(bufdown);
+                        name.c_str(), ch); 
+        printw("%s\n",bufdown);
+        if (system(bufdown)){
+            changeChannel(ch);
+        }
+
         channel = ch;    
 }
 
@@ -174,7 +196,7 @@ void device::getAP(string ssid_in){
     const u_char *packet;
 
     while(!choosen){
-        if(counter>3){
+        if(counter>REP_COUNT){
             counter = 0;            
             nextchannel = nextchannel % 12 + 5;
             changeChannel(nextchannel);
@@ -184,7 +206,7 @@ void device::getAP(string ssid_in){
         //           !!!If can't capture packet in 2seconds, change channel!!!
         try
         {
-            packet = next_packet_timed();
+            packet = next_packet_timed(handle, header);
         }
         catch(const std::exception& e)
         {
@@ -205,7 +227,7 @@ void device::getAP(string ssid_in){
         }   
         else {counter++;} 
     }    
-    
+    pcap_freecode(&fp);
     clear();
 
     refresh(); 
@@ -242,7 +264,7 @@ void device::searchAP(){
     keypad(stdscr, true); 
 
     while(!choosen){
-        if(counter>10){
+        if(counter>REP_COUNT){
             counter = 0;            
             nextchannel = nextchannel % 12 + 5;
             changeChannel(nextchannel);
@@ -265,12 +287,16 @@ void device::searchAP(){
             break;
         } 
         
+        if(choosen){
+            break;
+        }
+
         printw("CHANNEL - %d",channel);
         refresh();
 
         try
         {
-            packet = next_packet_timed();
+            packet = next_packet_timed(handle, header);
         }
         catch(const std::exception& e)
         {
@@ -302,6 +328,7 @@ void device::searchAP(){
             device::choosed = APs[i];
         }
     }
+    pcap_freecode(&fp);
     clear();
 
     refresh(); 
