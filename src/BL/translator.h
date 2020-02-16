@@ -104,14 +104,14 @@ const u_char *next_packet_timed(pcap_t *handle_t, pcap_pkthdr *header_t, const s
     return retValue;    
 }
 
-void translator::translate(){
+void translator::translate(){                                                       //ПОКАЗЫВАЕТ ТОЛЬКО HEADER БЕЗ PAYLOAD
     int nextchannel = current_net.get_channel();
     bool isFixed = false;
     std::chrono::microseconds timing = 400ms;
     while(1){
         try
         {
-            packet = next_packet_timed(devHandler.gethandle(), &header, timing);   //подходит только header из translate
+            packet = next_packet_timed(devHandler.gethandle(), &header, timing);    //подходит только header из translate
         }
         catch (const std::exception&)
         {
@@ -133,7 +133,7 @@ void translator::translate(){
             }
             else
             {
-                printf(".");
+                printf("%02x ", *packet);
             }
             if(i%64==0){
                 printf("\r\n");
