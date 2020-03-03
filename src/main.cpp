@@ -1,8 +1,10 @@
 #include "./BL/translator.h"
 
 #include <string>
+#include <csignal>
 
 #include <pthread.h>
+
 
 int main(int argc, char const *argv[])
 { 
@@ -14,9 +16,11 @@ int main(int argc, char const *argv[])
     при получении ssid 
         проверять mac-SSID
     */ 
-    
+    signal(SIGABRT, SIG_IGN);
     //выбор интерфейса и целевого ssid
     translator trans = translator(argc, argv);
+
+    
     //начать трансляцию
     
     return 0;

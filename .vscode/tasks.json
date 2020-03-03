@@ -15,7 +15,8 @@
                 "-lpcap",
                 "-Wpointer-arith",
                 "-pthread",
-                "-lncurses"
+                "-lncurses",
+                "-fno-stack-protector"
             ],
             "options": {
                 "cwd": "/usr/bin"

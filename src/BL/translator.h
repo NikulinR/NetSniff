@@ -28,7 +28,10 @@ class translator{
 
 translator::~translator(){};
 
+
 translator::translator(int argc, char const *argv[]){
+    
+    
     devHandler = device();
     switch (argc)
     {
@@ -68,16 +71,20 @@ translator::translator(int argc, char const *argv[]){
 
     printf("%s\r\n", filter_expression.c_str());
     //filter_expression = "type mgt subtype beacon";
-
-    if (pcap_compile(devHandler.gethandle(), &fp, filter_expression.c_str(), 0, PCAP_NETMASK_UNKNOWN)==-1){
-        printf("%s",pcap_geterr(devHandler.gethandle()));
+    bool tryagain = false;
+    do{
+        tryagain = false;
+        if (pcap_compile(devHandler.gethandle(), &fp, filter_expression.c_str(), 0, PCAP_NETMASK_UNKNOWN)==-1){
+            printf("%s",pcap_geterr(devHandler.gethandle()));
+            tryagain = true;
+        }
+        if (pcap_setfilter(devHandler.gethandle(), &fp)==-1){
+            printf("%s",pcap_geterr(devHandler.gethandle()));
+            tryagain = true;
+        }
     }
-    if (pcap_setfilter(devHandler.gethandle(), &fp)==-1){
-        printf("%s",pcap_geterr(devHandler.gethandle()));
-    }
-
-    //refresh();
-    //endwin();
+    while(tryagain);
+    
     translate();
 }
 
@@ -97,34 +104,38 @@ const u_char *next_packet_timed(pcap_t *handle_t, pcap_pkthdr *header_t, const s
 
     {
         std::unique_lock<std::mutex> l(m);
-        if(cv.wait_for(l, timing) == std::cv_status::timeout) 
+        if(cv.wait_for(l, timing) == std::cv_status::timeout) //how to kill thread???
             throw std::runtime_error("Timeout");
+            //return 0;
     }
 
     return retValue;    
 }
 
-void translator::translate(){
+void translator::translate(){                                                       //ПОКАЗЫВАЕТ ТОЛЬКО HEADER БЕЗ PAYLOAD
     int nextchannel = current_net.get_channel();
     bool isFixed = false;
-    std::chrono::microseconds timing = 400ms;
+    //std::chrono::microseconds timing = 400ms;
     while(1){
         try
         {
-            packet = next_packet_timed(devHandler.gethandle(), &header, timing);   //подходит только header из translate
+            //packet = next_packet_timed(devHandler.gethandle(), &header, timing);    //подходит только header из translate
+            packet = pcap_next(devHandler.gethandle(),  &header);
+            pcap_sendpacket(devHandler.gethandle(), packet, header.len);
         }
         catch (const std::exception&)
         {
-            timing = 400ms;
-            nextchannel = nextchannel % 12 + 5;
+            //timing = 4000ms;
+            /*nextchannel = nextchannel % 12 + 5;
             devHandler.changeChannel(nextchannel);
-            printf("\r\nTIMEOUT");
+            printf("\r\nTIMEOUT");*/
             continue;
         }
         
-        timing = 2000ms;
-
+        //timing = 2000ms;
+        
         printf("%d\r\n",header.len);
+
         //refresh();
         for(int i = 0; i<header.len; i++){
             if(packet == NULL) continue;
@@ -133,7 +144,7 @@ void translator::translate(){
             }
             else
             {
-                printf(".");
+                printf("%02x ", *packet);
             }
             if(i%64==0){
                 printf("\r\n");

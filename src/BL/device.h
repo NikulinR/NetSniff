@@ -14,8 +14,8 @@
 #include "network.h"
 #include "menu.h"
 
-#define IDLE_TIME 600ms
-#define REP_COUNT 5
+#define IDLE_TIME 1000ms
+#define REP_COUNT 3
 
 using namespace std;
 using namespace std::chrono_literals;
@@ -108,7 +108,7 @@ const u_char *device::next_packet_timed(pcap_t *handle_t, pcap_pkthdr header_t)
         if(cv.wait_for(l, IDLE_TIME) == std::cv_status::timeout) 
             throw std::runtime_error("Timeout");
     }
-
+    
     return retValue;    
 }
 
@@ -183,61 +183,65 @@ void device::getAP(string ssid_in){
     activateDev();
     if (pcap_compile(handle, &fp, "type mgt subtype beacon", 0, PCAP_NETMASK_UNKNOWN)==-1){
         printf("%s",pcap_geterr(handle));
+        searchAP();
     }
-    if (pcap_setfilter(handle, &fp)==-1){
+    else if (pcap_setfilter(handle, &fp)==-1){
         printf("%s",pcap_geterr(handle));
+        searchAP();
     }
-    bool choosen = false;
-    bool first_time = true;
-    int nextchannel = channel;
+    else{
+        bool choosen = false;
+        bool first_time = true;
+        int nextchannel = channel;
 
-    int counter = 0;
+        int counter = 0;
 
-    const u_char *packet;
+        const u_char *packet;
 
-    while(!choosen){
-        if(counter>REP_COUNT){
-            counter = 0;            
-            nextchannel = nextchannel % 12 + 5;
-            changeChannel(nextchannel);
-        }
-        
+        while(!choosen){
+            if(counter>REP_COUNT){
+                counter = 0;            
+                nextchannel = nextchannel % 12 + 5;
+                changeChannel(nextchannel);
+            }
+            
 
-        //           !!!If can't capture packet in 2seconds, change channel!!!
-        try
-        {
-            packet = next_packet_timed(handle, header);
-        }
-        catch(const std::exception& e)
-        {
-            counter = 0;            
-            nextchannel = nextchannel % 12 + 5;
-            changeChannel(nextchannel);
-            continue;
-        }
+            //           !!!If can't capture packet in 2seconds, change channel!!!
+            try
+            {
+                packet = next_packet_timed(handle, header);
+            }
+            catch(const std::exception& e)
+            {
+                counter = 0;            
+                nextchannel = nextchannel % 12 + 5;
+                changeChannel(nextchannel);
+                continue;
+            }
+            if(packet == NULL) continue;
+            ieee80211_frame* mac_header = (struct ieee80211_frame *)(packet+24);
+            ieee80211_beacon_or_probe_resp* beacon = (struct ieee80211_beacon_or_probe_resp*)(packet + 24 + 24);
+            
+            u8 ssid_len = beacon->info_element->len;
+            std::string ssid(beacon->info_element->ssid);
+            ssid = ssid.substr(0,ssid_len);
+            if(ssid_in == ssid){
+                device::choosed = network(ssid, mac_header->addr3, channel);          
+            }   
+            else {counter++;} 
+        }    
+        pcap_freecode(&fp);
+        clear();
 
-        ieee80211_frame* mac_header = (struct ieee80211_frame *)(packet+24);
-        ieee80211_beacon_or_probe_resp* beacon = (struct ieee80211_beacon_or_probe_resp*)(packet + 24 + 24);
-        
-        u8 ssid_len = beacon->info_element->len;
-        std::string ssid(beacon->info_element->ssid);
-        ssid = ssid.substr(0,ssid_len);
-        if(ssid_in == ssid){
-            device::choosed = network(ssid, mac_header->addr3, channel);          
-        }   
-        else {counter++;} 
-    }    
-    pcap_freecode(&fp);
-    clear();
-
-    refresh(); 
-    endwin();
-    printw("==CHOOSEN== \nSSID - %s\nMAC - %s\nCHANNEL - %d\n",
-        choosed.get_ssid().c_str(),
-        choosed.get_bssid().c_str(),
-        choosed.get_channel());
-    printw("On %s\n",getDevice().c_str());
-    refresh();
+        refresh(); 
+        endwin();
+        printw("==CHOOSEN== \nSSID - %s\nMAC - %s\nCHANNEL - %d\n",
+            choosed.get_ssid().c_str(),
+            choosed.get_bssid().c_str(),
+            choosed.get_channel());
+        printw("On %s\n",getDevice().c_str());
+        refresh();
+    }
 }
 
 void device::searchAP(){
@@ -245,103 +249,111 @@ void device::searchAP(){
     
     if (pcap_compile(handle, &fp, "subtype beacon", 0, PCAP_NETMASK_UNKNOWN)==-1){
         printf("%s",pcap_geterr(handle));
+        searchAP();
     }
-    if (pcap_setfilter(handle, &fp)==-1){
+    else if (pcap_setfilter(handle, &fp)==-1){
         printf("%s",pcap_geterr(handle));
+        searchAP();
     }
-    
-    bool choosen = false;
-    bool first_time = true;
-    int nextchannel = channel;
+    else{
+        bool choosen = false;
+        bool first_time = true;
+        int nextchannel = channel;
 
-    menu choosingAP = menu(APs_SSIDs,"Choose AP:");
-    int counter = 0;
+        menu choosingAP = menu(APs_SSIDs,"Choose AP:");
+        int counter = 0;
 
-    const u_char *packet;
+        const u_char *packet;
 
-    initscr();
-    timeout(30);
-    keypad(stdscr, true); 
+        initscr();
+        timeout(30);
+        keypad(stdscr, true); 
 
-    while(!choosen){
-        if(counter>REP_COUNT){
-            counter = 0;            
-            nextchannel = nextchannel % 12 + 5;
-            changeChannel(nextchannel);
-        }
-        choosingAP.render_menu();
-         
-        
-        switch (getch())
-        {
-        case KEY_UP:
-            if(choosingAP.choosen>0) choosingAP.choosen--;
-            break;
-        case KEY_DOWN:
-            if(choosingAP.choosen<choosingAP.args.size()-1) choosingAP.choosen++;
-            break;
-        case 10:
-            choosen = true;
-            break;
-        default:
-            break;
-        } 
-        
-        if(choosen){
-            break;
-        }
-
-        printw("CHANNEL - %d",channel);
-        refresh();
-
-        try
-        {
-            packet = next_packet_timed(handle, header);
-        }
-        catch(const std::exception& e)
-        {
-            counter = 0;            
-            nextchannel = nextchannel % 12 + 5;
-            changeChannel(nextchannel);
-            continue;
-        }
-
-        ieee80211_frame* mac_header = (struct ieee80211_frame *)(packet+24);
-        ieee80211_beacon_or_probe_resp* beacon = (struct ieee80211_beacon_or_probe_resp*)(packet + 24 + 24);
-        
-        refresh(); 
-
-        u8 ssid_len = beacon->info_element->len;
-        
-        
-        std::string ssid(beacon->info_element->ssid);
-        ssid = ssid.substr(0,ssid_len);
-        choosingAP.add_option(ssid);
-        if(find(APs_SSIDs.begin(), APs_SSIDs.end(), ssid)==APs_SSIDs.end()){
-            APs_SSIDs.insert(APs_SSIDs.end(),ssid);
-            APs.insert(APs.end(), network(ssid, mac_header->addr3, channel));
+        while(!choosen){
+            if(counter>REP_COUNT){
+                counter = 0;            
+                nextchannel = nextchannel % 12 + 5;
+                changeChannel(nextchannel);
+            }
+            choosingAP.render_menu();
             
-        }   
-        else {counter++;} 
-    }    
-    
-    for (size_t i = 0; i < APs.size(); i++)
-    {
-        if(APs[i].get_ssid() == choosingAP.args[choosingAP.choosen]){
-            device::choosed = APs[i];
-        }
-    }
-    pcap_freecode(&fp);
-    clear();
+            
+            switch (getch())
+            {
+            case KEY_UP:
+                if(choosingAP.choosen>0) choosingAP.choosen--;
+                break;
+            case KEY_DOWN:
+                if(choosingAP.choosen<choosingAP.args.size()-1) choosingAP.choosen++;
+                break;
+            case 10:
+                choosen = true;
+                break;
+            default:
+                break;
+            } 
+            
+            if(choosen){
+                break;
+            }
 
-    refresh(); 
-    endwin();
-    printf("==CHOOSEN== \r\nSSID - %s\r\nMAC - %s\r\nCHANNEL - %d\r\n",
-        choosed.get_ssid().c_str(),
-        choosed.get_bssid().c_str(),
-        choosed.get_channel());
-    printf("On %s\r\n",getDevice().c_str());
-    //refresh();
+            printw("CHANNEL - %d",channel);
+            refresh();
+
+            try
+            {
+                packet = next_packet_timed(handle, header);
+            }
+            catch(const std::exception& e)
+            {
+                counter = 0;            
+                nextchannel = nextchannel % 12 + 5;
+                changeChannel(nextchannel);
+                continue;
+            }
+
+            if(packet == NULL){
+                continue;
+            }
+            ieee80211_frame* mac_header = (struct ieee80211_frame *)(packet+24);
+            ieee80211_beacon_or_probe_resp* beacon = (struct ieee80211_beacon_or_probe_resp*)(packet + 24 + 24);
+            
+            
+
+            refresh(); 
+
+            u8 ssid_len = beacon->info_element->len;
+            
+            
+            std::string ssid(beacon->info_element->ssid);
+            ssid = ssid.substr(0,ssid_len);
+            choosingAP.add_option(ssid);
+            if(find(APs_SSIDs.begin(), APs_SSIDs.end(), ssid)==APs_SSIDs.end()){
+                APs_SSIDs.insert(APs_SSIDs.end(),ssid);
+                APs.insert(APs.end(), network(ssid, mac_header->addr3, channel));
+                
+            }   
+            else {counter++;} 
+        }    
+        
+        for (size_t i = 0; i < APs.size(); i++)
+        {
+            if(APs[i].get_ssid() == choosingAP.args[choosingAP.choosen]){
+                device::choosed = APs[i];
+            }
+        }
+        pcap_freecode(&fp);
+        clear();
+
+        refresh(); 
+        endwin();
+        printf("==CHOOSEN== \r\nSSID - %s\r\nMAC - %s\r\nCHANNEL - %d\r\n",
+            choosed.get_ssid().c_str(),
+            choosed.get_bssid().c_str(),
+            choosed.get_channel());
+        printf("On %s\r\n",getDevice().c_str());
+        //refresh();
+    }
 }
 
 
