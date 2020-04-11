@@ -12,7 +12,7 @@ int main(int argc, char const *argv[])
     
     //TODO
     /*
-    проверить ловятся ли beaconы
+    проверить ловятся ли beaconы  
     при получении ssid 
         проверять mac-SSID
     */ 

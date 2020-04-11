@@ -12,9 +12,20 @@ using namespace std;
 class translator{
     private:
         device devHandler;
+        device dev2Handler;
         network current_net;
-        struct pcap_pkthdr header;
-        const u_char *packet;
+        void recvsendAP();
+        void recvsendDST();
+        bool stopAP = false;
+        bool stopDST = false;
+
+        struct pcap_pkthdr headerDST;
+        struct pcap_pkthdr headerAP;
+
+        pcap_t *handleDST;
+
+        const u_char *packetDST;
+        const u_char *packetAP;
     
     public:
         translator(int argc, char const *argv[]);
@@ -54,46 +65,15 @@ translator::translator(int argc, char const *argv[]){
         break;
     }
     current_net = devHandler.choosed;
-    
-
-    devHandler.changeChannel(current_net.get_channel());  //command failed: Device or resource busy (-16)
-    
-    printf("%d\r\n",devHandler.getChannel());
-
-    struct bpf_program fp;
-
-    string filter_expression = "ether host ";
-    filter_expression.append(current_net.get_bssid());
-
-    printf("%s\r\n", filter_expression.c_str());
-    //filter_expression = "type mgt subtype beacon";
-    
-    pcap_freecode(&devHandler.fp);
-    bool tryagain = false;
-    do{
-        tryagain = false;
-        if (pcap_compile(devHandler.gethandle(), &fp, filter_expression.c_str(), 0, PCAP_NETMASK_UNKNOWN)==-1){
-            printf("%s",pcap_geterr(devHandler.gethandle()));
-            tryagain = true;
-        }
-        if (pcap_setfilter(devHandler.gethandle(), &fp)==-1){
-            printf("%s",pcap_geterr(devHandler.gethandle()));
-            tryagain = true;
-        }
-    }
-    while(tryagain);
-    
-    //translate(devHandler.getDevice().c_str());
-    translate("enp4s0f1");
 }
 
-const u_char *next_packet_timed(pcap_t *handle_t, pcap_pkthdr *header_t, const std::chrono::microseconds timing)
+const u_char *next_packet_stoppable(pcap_t *handle_t, pcap_pkthdr *header_t, bool *stop)
 {
     std::mutex m;
     std::condition_variable cv;
     const u_char *retValue;
 
-    std::thread t([&cv, &retValue, &handle_t, &header_t]() 
+    std::thread t([&cv, &retValue, &handle_t, header_t]() 
     {
         retValue = pcap_next(handle_t, header_t);
         cv.notify_one();
@@ -103,67 +83,131 @@ const u_char *next_packet_timed(pcap_t *handle_t, pcap_pkthdr *header_t, const s
 
     {
         std::unique_lock<std::mutex> l(m);
-        if(cv.wait_for(l, timing) == std::cv_status::timeout) //how to kill thread???
+        if(stop) 
             throw std::runtime_error("Timeout");
-            //return 0;
+            //return NULL;
     }
-
+    
     return retValue;    
 }
 
-void translator::translate(const char* dev){                                                       //ПОКАЗЫВАЕТ ТОЛЬКО HEADER БЕЗ PAYLOAD
-    int nextchannel = current_net.get_channel();
-    bool isFixed = false;
 
-    
-    pcap_t *handle;
-
-    char *errbuf;
-
-    if(strcmp(dev, devHandler.getDevice().c_str())){
-        handle = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
-    }
-    else {
-        handle = devHandler.gethandle();
-    }
-    //std::chrono::microseconds timing = 400ms;
-    while(1){
-        try
-        {
-            //packet = next_packet_timed(devHandler.gethandle(), &header, timing);    //подходит только header из translate
-            packet = pcap_next(devHandler.gethandle(),  &header);
-            pcap_sendpacket(handle, packet, header.len);
+void print_packet(struct pcap_pkthdr header, const u_char * packet){
+    for(int i = 0; i<header.len; i++){
+        if(packet == NULL) continue;
+        if(isprint(*packet)){
+            printf("%c", *packet);
         }
-        catch (const std::exception&)
+        else
         {
-            //timing = 4000ms;
-            /*nextchannel = nextchannel % 12 + 5;
-            devHandler.changeChannel(nextchannel);
-            printf("\r\nTIMEOUT");*/
-            continue;
+            printf("%02x ", *packet);
         }
-        
-        //timing = 2000ms;
-        
-        printf("%d\r\n",header.len);
-
+        if(i%64==0){
+            printf("\r\n");
+        }
         //refresh();
-        for(int i = 0; i<header.len; i++){
-            if(packet == NULL) continue;
-            if(isprint(*packet)){
-                printf("%c", *packet);
-            }
-            else
-            {
-                printf("%02x ", *packet);
-            }
-            if(i%64==0){
-                printf("\r\n");
-            }
-            //refresh();
-            packet++;
-        }
-        printf("\n======NEXT======\n");
-        
+        packet++;
     }
+    printf("\n======NEXT======\n");
+}
+
+void translator::recvsendAP(){
+    try
+    {
+        packetAP = next_packet_stoppable(devHandler.gethandle(),  &headerAP, &stopAP); 
+        stopDST = true;         
+        pcap_sendpacket(dev2Handler.gethandle(), packetAP, headerAP.len);
+        stopDST = false;
+
+        print_packet(headerAP, packetAP);
+
+        recvsendAP();
+    }
+    catch(const std::exception& e)
+    {
+        recvsendAP();
+    }
+    
+      
+    
+}
+
+void translator::recvsendDST(){
+    try
+    {
+        packetDST = next_packet_stoppable(dev2Handler.gethandle(),  &headerDST, &stopDST);   
+        stopAP = true;         
+        pcap_sendpacket(devHandler.gethandle(), packetDST, headerDST.len);
+        stopAP = false;
+
+        print_packet(headerDST, packetDST);
+
+        recvsendDST();
+    }
+    catch(const std::exception& e)
+    {
+        recvsendDST();
+    }
+}
+
+
+
+void translator::translate(const char* devDST){                                                       //ПОКАЗЫВАЕТ ТОЛЬКО HEADER БЕЗ PAYLOAD
+   
+    if(strcmp(devDST, devHandler.getDevice().c_str())){
+        dev2Handler.name = devDST;
+        dev2Handler.activateDev();
+        handleDST = dev2Handler.gethandle();
+        dev2Handler.changeChannel(current_net.get_channel());
+    }
+    else{
+        handleDST = devHandler.gethandle();
+        devHandler.changeChannel(current_net.get_channel());
+    }
+
+    struct bpf_program fpDST, fpAP;
+
+    string filter_expression_AP = "ether src ";
+    filter_expression_AP.append(current_net.get_bssid());
+
+    string filter_expression_DST = "ether dst ";
+    filter_expression_DST.append(current_net.get_bssid());
+    
+    pcap_freecode(&devHandler.fp);
+    bool tryagain = false;
+    do{
+        tryagain = false;
+        if (pcap_compile(devHandler.gethandle(), &fpAP, filter_expression_AP.c_str(), 0, PCAP_NETMASK_UNKNOWN)==-1){
+            printf("%s",pcap_geterr(devHandler.gethandle()));
+            tryagain = true;
+        }
+        if (pcap_setfilter(devHandler.gethandle(), &fpAP)==-1){
+            printf("%s",pcap_geterr(devHandler.gethandle()));
+            tryagain = true;
+        }
+    }
+    while(tryagain);
+
+    pcap_freecode(&dev2Handler.fp);
+    do{
+        tryagain = false;
+        if (pcap_compile(dev2Handler.gethandle(), &fpDST, filter_expression_DST.c_str(), 0, PCAP_NETMASK_UNKNOWN)==-1){
+            printf("%s",pcap_geterr(dev2Handler.gethandle()));
+            tryagain = true;
+        }
+        if (pcap_setfilter(dev2Handler.gethandle(), &fpDST)==-1){
+            printf("%s",pcap_geterr(dev2Handler.gethandle()));
+            tryagain = true;
+        }
+    }
+    while(tryagain);
+
+
+
+    std::thread thrAP(&translator::recvsendAP, this);
+
+    std::thread thrDST(&translator::recvsendDST, this);
+
+    thrAP.detach();
+    thrDST.detach();
 }

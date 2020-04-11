@@ -28,7 +28,7 @@ private:
     int channel;
     pcap_if_t *pcap_dev;
     pcap_t *handle;
-    string name;
+    
     vector<string> available;
     vector<network> APs; 
     string current_ssid;
@@ -45,6 +45,7 @@ public:
     ~device();
     network choosed;
     
+    string name;
     struct bpf_program fp;
     int getChannel(){return channel;}
     vector<string> getDevs() {return available;}
