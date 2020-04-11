@@ -18,7 +18,7 @@
 #define KEY_DOWN 66
 #define KEY_ENTER 10*/
 
-using namespace std;
+//using namespace std;
 
 class menu
 {
@@ -88,7 +88,7 @@ string menu::listen(bool started = true){
     bool done = false;
     int i_input = 0;
     initscr();
-    timeout(600);
+    timeout(60);
     keypad(stdscr, true); 
     while(!done){    
         menu::render_menu();  

@@ -22,7 +22,7 @@ class translator{
         ~translator();
 
         void compare_SSID_BSSID();
-        void translate();
+        void translate(const char *dev);
     
 };
 
@@ -54,11 +54,7 @@ translator::translator(int argc, char const *argv[]){
         break;
     }
     current_net = devHandler.choosed;
-
-
     
-    //devHandler.shutdownDev();
-    //devHandler.activateDev();
 
     devHandler.changeChannel(current_net.get_channel());  //command failed: Device or resource busy (-16)
     
@@ -71,6 +67,8 @@ translator::translator(int argc, char const *argv[]){
 
     printf("%s\r\n", filter_expression.c_str());
     //filter_expression = "type mgt subtype beacon";
+    
+    pcap_freecode(&devHandler.fp);
     bool tryagain = false;
     do{
         tryagain = false;
@@ -85,7 +83,8 @@ translator::translator(int argc, char const *argv[]){
     }
     while(tryagain);
     
-    translate();
+    //translate(devHandler.getDevice().c_str());
+    translate("enp4s0f1");
 }
 
 const u_char *next_packet_timed(pcap_t *handle_t, pcap_pkthdr *header_t, const std::chrono::microseconds timing)
@@ -112,16 +111,28 @@ const u_char *next_packet_timed(pcap_t *handle_t, pcap_pkthdr *header_t, const s
     return retValue;    
 }
 
-void translator::translate(){                                                       //ПОКАЗЫВАЕТ ТОЛЬКО HEADER БЕЗ PAYLOAD
+void translator::translate(const char* dev){                                                       //ПОКАЗЫВАЕТ ТОЛЬКО HEADER БЕЗ PAYLOAD
     int nextchannel = current_net.get_channel();
     bool isFixed = false;
+
+    
+    pcap_t *handle;
+
+    char *errbuf;
+
+    if(strcmp(dev, devHandler.getDevice().c_str())){
+        handle = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
+    }
+    else {
+        handle = devHandler.gethandle();
+    }
     //std::chrono::microseconds timing = 400ms;
     while(1){
         try
         {
             //packet = next_packet_timed(devHandler.gethandle(), &header, timing);    //подходит только header из translate
             packet = pcap_next(devHandler.gethandle(),  &header);
-            pcap_sendpacket(devHandler.gethandle(), packet, header.len);
+            pcap_sendpacket(handle, packet, header.len);
         }
         catch (const std::exception&)
         {
@@ -152,6 +163,7 @@ void translator::translate(){                                                   
             //refresh();
             packet++;
         }
+        printf("\n======NEXT======\n");
         
     }
 }

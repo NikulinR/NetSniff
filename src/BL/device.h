@@ -23,7 +23,6 @@ using namespace std::chrono_literals;
 class device
 {
 private:
-    struct bpf_program fp;
     struct pcap_pkthdr header;
     
     int channel;
@@ -46,6 +45,7 @@ public:
     ~device();
     network choosed;
     
+    struct bpf_program fp;
     int getChannel(){return channel;}
     vector<string> getDevs() {return available;}
     int getDevCount(){return devCount;}
@@ -107,6 +107,7 @@ const u_char *device::next_packet_timed(pcap_t *handle_t, pcap_pkthdr header_t)
         std::unique_lock<std::mutex> l(m);
         if(cv.wait_for(l, IDLE_TIME) == std::cv_status::timeout) 
             throw std::runtime_error("Timeout");
+            //return NULL;
     }
     
     return retValue;    
@@ -170,9 +171,9 @@ void device::changeChannel(int ch){
                         sizeof(bufdown), 
                         "sudo iw dev %s set channel %d",
                         name.c_str(), ch); 
-        printf("%s\n\r",bufdown);
-        if (system(bufdown)){
-            changeChannel(ch);
+        //printf("%s\n\r",bufdown);
+        while (system(bufdown)){
+            continue;
         }
 
         channel = ch;    
@@ -319,13 +320,15 @@ void device::searchAP(){
             ieee80211_beacon_or_probe_resp* beacon = (struct ieee80211_beacon_or_probe_resp*)(packet + 24 + 24);
             
             
-
+            printw("\n%d %s\n",beacon->info_element->len, beacon->info_element->ssid);
             refresh(); 
 
             u8 ssid_len = beacon->info_element->len;
             
             
             std::string ssid(beacon->info_element->ssid);
+            
+
             ssid = ssid.substr(0,ssid_len);
             choosingAP.add_option(ssid);
             if(find(APs_SSIDs.begin(), APs_SSIDs.end(), ssid)==APs_SSIDs.end()){
