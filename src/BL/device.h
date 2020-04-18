@@ -23,7 +23,7 @@ using namespace std::chrono_literals;
 class device
 {
 private:
-    struct pcap_pkthdr header;
+    
     
     int channel;
     pcap_if_t *pcap_dev;
@@ -43,6 +43,8 @@ private:
 public:
     device();
     ~device();
+
+    struct pcap_pkthdr header;
     network choosed;
     
     string name;
@@ -54,6 +56,7 @@ public:
     pcap_t *gethandle(){return handle;}
     pcap_pkthdr *getHeader(){return &header;};
     void setDevice(string dev){name = dev;}
+    bool block = false;
 
     void searchDevs();
     void activateDev();
@@ -61,13 +64,9 @@ public:
     void searchAP();
     string *getAPs();
     void changeChannel(int ch);
-    void getAP(string ssid);
 
     const u_char* next_packet(){return pcap_next(handle, &header);}
     const u_char* next_packet_timed(pcap_t *handle_t, pcap_pkthdr header_t);
-
-    void copmare_ssid_to_bssid();
-    void translate();
 };
 
 void device::searchDevs()
@@ -108,7 +107,6 @@ const u_char *device::next_packet_timed(pcap_t *handle_t, pcap_pkthdr header_t)
         std::unique_lock<std::mutex> l(m);
         if(cv.wait_for(l, IDLE_TIME) == std::cv_status::timeout) 
             throw std::runtime_error("Timeout");
-            //return NULL;
     }
     
     return retValue;    
@@ -150,11 +148,14 @@ void device::activateDev(){
                     "sudo ip link set %s down & sudo iw dev %s set monitor control & sudo ip link set %s up",
                     name.c_str(),name.c_str(),name.c_str()); 
     printf("%s\n",bufdown);
-    system(bufdown);
+    
+    while(system(bufdown)){
+        continue;
+    }
 
     handle = pcap_create(name.c_str(), errbuf);
     pcap_set_rfmon(handle, 1);
-	pcap_set_promisc(handle, 1); /* Capture packets that are not yours */
+	//pcap_set_promisc(handle, 1); /* Capture packets that are not yours */
 	pcap_set_snaplen(handle, 2048); /* Snapshot length */
 	pcap_set_timeout(handle, 1000); /* Timeout in milliseconds */
 	pcap_activate(handle);
@@ -180,71 +181,6 @@ void device::changeChannel(int ch){
         channel = ch;    
 }
 
-
-void device::getAP(string ssid_in){
-    activateDev();
-    if (pcap_compile(handle, &fp, "type mgt subtype beacon", 0, PCAP_NETMASK_UNKNOWN)==-1){
-        printf("%s",pcap_geterr(handle));
-        searchAP();
-    }
-    else if (pcap_setfilter(handle, &fp)==-1){
-        printf("%s",pcap_geterr(handle));
-        searchAP();
-    }
-    else{
-        bool choosen = false;
-        bool first_time = true;
-        int nextchannel = channel;
-
-        int counter = 0;
-
-        const u_char *packet;
-
-        while(!choosen){
-            if(counter>REP_COUNT){
-                counter = 0;            
-                nextchannel = nextchannel % 12 + 5;
-                changeChannel(nextchannel);
-            }
-            
-
-            //           !!!If can't capture packet in 2seconds, change channel!!!
-            try
-            {
-                packet = next_packet_timed(handle, header);
-            }
-            catch(const std::exception& e)
-            {
-                counter = 0;            
-                nextchannel = nextchannel % 12 + 5;
-                changeChannel(nextchannel);
-                continue;
-            }
-            if(packet == NULL) continue;
-            ieee80211_frame* mac_header = (struct ieee80211_frame *)(packet+24);
-            ieee80211_beacon_or_probe_resp* beacon = (struct ieee80211_beacon_or_probe_resp*)(packet + 24 + 24);
-            
-            u8 ssid_len = beacon->info_element->len;
-            std::string ssid(beacon->info_element->ssid);
-            ssid = ssid.substr(0,ssid_len);
-            if(ssid_in == ssid){
-                device::choosed = network(ssid, mac_header->addr3, channel);          
-            }   
-            else {counter++;} 
-        }    
-        pcap_freecode(&fp);
-        clear();
-
-        refresh(); 
-        endwin();
-        printw("==CHOOSEN== \nSSID - %s\nMAC - %s\nCHANNEL - %d\n",
-            choosed.get_ssid().c_str(),
-            choosed.get_bssid().c_str(),
-            choosed.get_channel());
-        printw("On %s\n",getDevice().c_str());
-        refresh();
-    }
-}
 
 void device::searchAP(){
     activateDev();

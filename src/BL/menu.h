@@ -27,9 +27,7 @@ private:
     
     
     string desc;
-    bool isFinalized;
-    int get_str_list_size(string arr);
-    
+    bool isFinalized;    
 
 public:
     menu(vector<string> args, string desc);
@@ -41,7 +39,6 @@ public:
     void render_menu();
     void add_option(string arg);
     string listen(bool started);   
-    void getch_rec(char* value); 
 };
 
 menu::menu(vector<string> args, string desc = "")

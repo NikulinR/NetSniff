@@ -9,19 +9,15 @@
 int main(int argc, char const *argv[])
 { 
     setlocale(LC_ALL,"Russian");
-    
-    //TODO
-    /*
-    проверить ловятся ли beaconы  
-    при получении ssid 
-        проверять mac-SSID
-    */ 
     signal(SIGABRT, SIG_IGN);
+    
     //выбор интерфейса и целевого ssid
     translator trans = translator(argc, argv);
-
     
-    //начать трансляцию
+    device second = device();
+    second.searchDevs(); 
+
+    trans.translate(second.name.c_str());
     
     return 0;
 } 

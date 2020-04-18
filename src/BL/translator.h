@@ -7,6 +7,10 @@
 #include <pcap.h>
 #include "device.h"
 
+#include <pthread.h>
+#include <signal.h>
+#include <future>
+
 using namespace std;
 
 class translator{
@@ -32,8 +36,10 @@ class translator{
         
         ~translator();
 
-        void compare_SSID_BSSID();
         void translate(const char *dev);
+
+        //const u_char *next_packet_stoppable(pcap_t *handle_t, pcap_pkthdr header_t, bool *stop);
+
     
 };
 
@@ -41,9 +47,6 @@ translator::~translator(){};
 
 
 translator::translator(int argc, char const *argv[]){
-    
-    
-    devHandler = device();
     switch (argc)
     {
     case 1:
@@ -55,27 +58,22 @@ translator::translator(int argc, char const *argv[]){
         devHandler.setDevice(std::string(argv[1]));
         devHandler.searchAP();
         break;
-
-    case 3:
-        devHandler.setDevice(std::string(argv[1]));
-        devHandler.getAP(std::string(argv[2]));  
-        break;
-
+        
     default:
         break;
     }
     current_net = devHandler.choosed;
 }
 
-const u_char *next_packet_stoppable(pcap_t *handle_t, pcap_pkthdr *header_t, bool *stop)
+static const u_char *next_packet_stoppable(device *dev, pcap_pkthdr header_t)
 {
     std::mutex m;
     std::condition_variable cv;
     const u_char *retValue;
 
-    std::thread t([&cv, &retValue, &handle_t, header_t]() 
+    std::thread t([&cv, &retValue, dev, &header_t]() 
     {
-        retValue = pcap_next(handle_t, header_t);
+        retValue = pcap_next(dev->gethandle(), &header_t);
         cv.notify_one();
     });
 
@@ -83,9 +81,8 @@ const u_char *next_packet_stoppable(pcap_t *handle_t, pcap_pkthdr *header_t, boo
 
     {
         std::unique_lock<std::mutex> l(m);
-        if(stop) 
+        if(dev->block) 
             throw std::runtime_error("Timeout");
-            //return NULL;
     }
     
     return retValue;    
@@ -111,48 +108,81 @@ void print_packet(struct pcap_pkthdr header, const u_char * packet){
     printf("\n======NEXT======\n");
 }
 
-void translator::recvsendAP(){
+static void recvsend(device &toRecv, device &toSend){
     try
     {
-        packetAP = next_packet_stoppable(devHandler.gethandle(),  &headerAP, &stopAP); 
-        stopDST = true;         
-        pcap_sendpacket(dev2Handler.gethandle(), packetAP, headerAP.len);
-        stopDST = false;
+        pcap_pkthdr cur_header;
+        const u_char *packetAP = next_packet_stoppable(&toRecv, cur_header);
+        
+        toSend.block = true;         
+        pcap_sendpacket(toSend.gethandle(), packetAP, cur_header.len);
+        toSend.block = false;
 
-        print_packet(headerAP, packetAP);
+        print_packet(cur_header, packetAP);
 
-        recvsendAP();
+        recvsend(toRecv, toSend);
     }
     catch(const std::exception& e)
     {
-        recvsendAP();
-    }
-    
-      
-    
-}
-
-void translator::recvsendDST(){
-    try
-    {
-        packetDST = next_packet_stoppable(dev2Handler.gethandle(),  &headerDST, &stopDST);   
-        stopAP = true;         
-        pcap_sendpacket(devHandler.gethandle(), packetDST, headerDST.len);
-        stopAP = false;
-
-        print_packet(headerDST, packetDST);
-
-        recvsendDST();
-    }
-    catch(const std::exception& e)
-    {
-        recvsendDST();
+        recvsend(toRecv, toSend);
     }
 }
 
+static const u_char *catch_packet(device *first, device *second){
+    std::mutex m1;
+    const u_char *retValue;
+    retValue = NULL;
 
 
-void translator::translate(const char* devDST){                                                       //ПОКАЗЫВАЕТ ТОЛЬКО HEADER БЕЗ PAYLOAD
+    
+    std::thread t1([&retValue, &m1, &first]() 
+    {
+        const u_char *ans1 = pcap_next(first->gethandle(), &first->header);
+        if(ans1 != NULL){            
+            m1.lock();
+            retValue = ans1;        
+            first->block = true;
+            m1.unlock();  
+        }      
+    }); 
+
+    std::thread t2([&retValue, &m1, &second]() 
+    {
+        const u_char *ans2 = pcap_next(second->gethandle(), &second->header);
+        if(ans2 != NULL){
+            m1.lock();
+            retValue = ans2;        
+            second->block = true;
+            m1.unlock();
+        }        
+    });    
+    
+    t1.detach();
+    t2.detach();
+
+    pcap_breakloop(first->gethandle());
+    pcap_breakloop(second->gethandle());
+    sleep(5);
+    
+    return retValue;
+}
+
+static void send_packet(const u_char *packet, device *first, device *second){
+    if(first->block){
+        pcap_sendpacket(second->gethandle(), packet, first->header.len); 
+        print_packet(first->header, packet);       
+    }
+    if(second->block){
+        pcap_sendpacket(first->gethandle(), packet, second->header.len);
+        print_packet(second->header, packet); 
+    }
+    
+    first->block = false;
+    second->block = false;
+}
+
+
+void translator::translate(const char* devDST){                                            
    
     if(strcmp(devDST, devHandler.getDevice().c_str())){
         dev2Handler.name = devDST;
@@ -188,7 +218,6 @@ void translator::translate(const char* devDST){                                 
     }
     while(tryagain);
 
-    pcap_freecode(&dev2Handler.fp);
     do{
         tryagain = false;
         if (pcap_compile(dev2Handler.gethandle(), &fpDST, filter_expression_DST.c_str(), 0, PCAP_NETMASK_UNKNOWN)==-1){
@@ -202,12 +231,14 @@ void translator::translate(const char* devDST){                                 
     }
     while(tryagain);
 
+    /*std::thread thrAP(recvsend, std::ref(devHandler), std::ref(dev2Handler));
 
-
-    std::thread thrAP(&translator::recvsendAP, this);
-
-    std::thread thrDST(&translator::recvsendDST, this);
+    std::thread thrDST(recvsend, std::ref(dev2Handler), std::ref(devHandler));
 
     thrAP.detach();
-    thrDST.detach();
+    thrDST.detach();*/
+    while(true){
+        send_packet(catch_packet(&devHandler, &dev2Handler), &devHandler, &dev2Handler);
+    }
+    
 }
