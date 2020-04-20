@@ -85,7 +85,7 @@ string menu::listen(bool started = true){
     bool done = false;
     int i_input = 0;
     initscr();
-    timeout(60);
+    timeout(30);
     keypad(stdscr, true); 
     while(!done){    
         menu::render_menu();  

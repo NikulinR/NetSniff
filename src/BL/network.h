@@ -13,6 +13,7 @@ private:
     string bssid_str;
     int channel;
     char *errbuf = new char[PCAP_ERRBUF_SIZE];
+
 public:
     network(string ssid, __u8 *bssid, char channel);
     network();
@@ -24,9 +25,9 @@ public:
     void get_bssid_raw(__u8[]);
     int get_channel(){return channel;};
     
-    void set_ssid(string ssid);
-    void set_bssid(string bssid);
-    void set_bssid_raw(__u8[]);
+    void set_ssid(string ssid){this->ssid = ssid;};
+    void set_bssid(string bssid){this->bssid_str = bssid;};
+    void set_bssid_raw(__u8[]){this->bssid = bssid};
     void set_channel(int channel){network::channel = channel;};
 };
 
@@ -59,5 +60,6 @@ string network::get_bssid_f(){
                        (unsigned char) bssid[4],
                        (unsigned char) bssid[5]);  
     res = buf;
+    this->bssid_str = res;
     return res;
 }

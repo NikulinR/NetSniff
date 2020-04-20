@@ -22,12 +22,11 @@ using namespace std::chrono_literals;
 
 class device
 {
-private:
-    
-    
+private:    
     int channel;
     pcap_if_t *pcap_dev;
     pcap_t *handle;
+    string name;
     
     vector<string> available;
     vector<network> APs; 
@@ -42,12 +41,13 @@ private:
 
 public:
     device();
+    device(string name);
+    device(const char *name);
     ~device();
 
     struct pcap_pkthdr header;
     network choosed;
     
-    string name;
     struct bpf_program fp;
     int getChannel(){return channel;}
     vector<string> getDevs() {return available;}
@@ -56,6 +56,7 @@ public:
     pcap_t *gethandle(){return handle;}
     pcap_pkthdr *getHeader(){return &header;};
     void setDevice(string dev){name = dev;}
+    void setDevice(const char *dev){name = dev;}
     bool block = false;
 
     void searchDevs();
@@ -66,7 +67,7 @@ public:
     void changeChannel(int ch);
 
     const u_char* next_packet(){return pcap_next(handle, &header);}
-    const u_char* next_packet_timed(pcap_t *handle_t, pcap_pkthdr header_t);
+    const u_char* next_packet_timed(device *dev);
 };
 
 void device::searchDevs()
@@ -80,8 +81,18 @@ void device::searchDevs()
 }
 
 device::device(){
-
 }
+
+device::device(string name){
+    this->name = name;
+    this->activateDev();
+}
+
+device::device(const char *name){
+    this->name = name;
+    this->activateDev();
+}
+
 
 device::~device()
 {
@@ -89,15 +100,15 @@ device::~device()
 }
 
 
-const u_char *device::next_packet_timed(pcap_t *handle_t, pcap_pkthdr header_t)
+const u_char *device::next_packet_timed(device *dev)
 {
     std::mutex m;
     std::condition_variable cv;
     const u_char *retValue;
 
-    std::thread t([&cv, &retValue, &handle_t, &header_t]() 
+    std::thread t([&cv, &retValue, dev]() 
     {
-        retValue = pcap_next(handle_t, &header_t);
+        retValue = dev->next_packet();
         cv.notify_one();
     });
 
@@ -240,7 +251,7 @@ void device::searchAP(){
 
             try
             {
-                packet = next_packet_timed(handle, header);
+                packet = next_packet_timed(this);
             }
             catch(const std::exception& e)
             {

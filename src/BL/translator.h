@@ -36,11 +36,7 @@ class translator{
         
         ~translator();
 
-        void translate(const char *dev);
-
-        //const u_char *next_packet_stoppable(pcap_t *handle_t, pcap_pkthdr header_t, bool *stop);
-
-    
+        void translate(const char *dev);    
 };
 
 translator::~translator(){};
@@ -65,30 +61,6 @@ translator::translator(int argc, char const *argv[]){
     current_net = devHandler.choosed;
 }
 
-static const u_char *next_packet_stoppable(device *dev, pcap_pkthdr header_t)
-{
-    std::mutex m;
-    std::condition_variable cv;
-    const u_char *retValue;
-
-    std::thread t([&cv, &retValue, dev, &header_t]() 
-    {
-        retValue = pcap_next(dev->gethandle(), &header_t);
-        cv.notify_one();
-    });
-
-    t.detach();
-
-    {
-        std::unique_lock<std::mutex> l(m);
-        if(dev->block) 
-            throw std::runtime_error("Timeout");
-    }
-    
-    return retValue;    
-}
-
-
 void print_packet(struct pcap_pkthdr header, const u_char * packet){
     for(int i = 0; i<header.len; i++){
         if(packet == NULL) continue;
@@ -102,39 +74,15 @@ void print_packet(struct pcap_pkthdr header, const u_char * packet){
         if(i%64==0){
             printf("\r\n");
         }
-        //refresh();
         packet++;
     }
     printf("\n======NEXT======\n");
-}
-
-static void recvsend(device &toRecv, device &toSend){
-    try
-    {
-        pcap_pkthdr cur_header;
-        const u_char *packetAP = next_packet_stoppable(&toRecv, cur_header);
-        
-        toSend.block = true;         
-        pcap_sendpacket(toSend.gethandle(), packetAP, cur_header.len);
-        toSend.block = false;
-
-        print_packet(cur_header, packetAP);
-
-        recvsend(toRecv, toSend);
-    }
-    catch(const std::exception& e)
-    {
-        recvsend(toRecv, toSend);
-    }
 }
 
 static const u_char *catch_packet(device *first, device *second){
     std::mutex m1;
     const u_char *retValue;
     retValue = NULL;
-
-
-    
     std::thread t1([&retValue, &m1, &first]() 
     {
         const u_char *ans1 = pcap_next(first->gethandle(), &first->header);
@@ -143,6 +91,7 @@ static const u_char *catch_packet(device *first, device *second){
             retValue = ans1;        
             first->block = true;
             m1.unlock();  
+            sleep(5);
         }      
     }); 
 
@@ -154,6 +103,7 @@ static const u_char *catch_packet(device *first, device *second){
             retValue = ans2;        
             second->block = true;
             m1.unlock();
+            sleep(5);
         }        
     });    
     
@@ -185,8 +135,7 @@ static void send_packet(const u_char *packet, device *first, device *second){
 void translator::translate(const char* devDST){                                            
    
     if(strcmp(devDST, devHandler.getDevice().c_str())){
-        dev2Handler.name = devDST;
-        dev2Handler.activateDev();
+        dev2Handler = device(devDST);
         handleDST = dev2Handler.gethandle();
         dev2Handler.changeChannel(current_net.get_channel());
     }
@@ -231,12 +180,6 @@ void translator::translate(const char* devDST){
     }
     while(tryagain);
 
-    /*std::thread thrAP(recvsend, std::ref(devHandler), std::ref(dev2Handler));
-
-    std::thread thrDST(recvsend, std::ref(dev2Handler), std::ref(devHandler));
-
-    thrAP.detach();
-    thrDST.detach();*/
     while(true){
         send_packet(catch_packet(&devHandler, &dev2Handler), &devHandler, &dev2Handler);
     }
