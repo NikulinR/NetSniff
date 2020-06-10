@@ -78,6 +78,8 @@ void device::searchDevs()
     
     menu dev_menu = menu(available, "Please choose target device:");
     name = dev_menu.listen();
+
+    activateDev();
 }
 
 device::device(){
@@ -159,19 +161,26 @@ void device::activateDev(){
                     "sudo ip link set %s down & sudo iw dev %s set monitor control & sudo ip link set %s up",
                     name.c_str(),name.c_str(),name.c_str()); 
     printf("%s\n",bufdown);
-    
-    while(system(bufdown)){
+    int counter = 0;
+    while(system(bufdown) && counter < 50){
+        counter++;
         continue;
     }
 
-    handle = pcap_create(name.c_str(), errbuf);
-    pcap_set_rfmon(handle, 1);
-	//pcap_set_promisc(handle, 1); /* Capture packets that are not yours */
-	pcap_set_snaplen(handle, 2048); /* Snapshot length */
-	pcap_set_timeout(handle, 1000); /* Timeout in milliseconds */
-	pcap_activate(handle);
-    channel = 1;
-    changeChannel(0);
+    if(counter >= 50){
+        printf("Activation timeout... Check your device!");
+        searchDevs();
+    }
+    else{
+        handle = pcap_create(name.c_str(), errbuf);
+        pcap_set_rfmon(handle, 1);
+        //pcap_set_promisc(handle, 1); /* Capture packets that are not yours */
+        pcap_set_snaplen(handle, 2048); /* Snapshot length */
+        pcap_set_timeout(handle, 1000); /* Timeout in milliseconds */
+        pcap_activate(handle);
+        channel = 1;
+        changeChannel(0);
+    }
 }
 
 void device::changeChannel(int ch){
@@ -197,10 +206,12 @@ void device::searchAP(){
     activateDev();
     
     if (pcap_compile(handle, &fp, "subtype beacon", 0, PCAP_NETMASK_UNKNOWN)==-1){
+        pcap_freecode(&fp);
         printf("%s",pcap_geterr(handle));
         searchAP();
     }
     else if (pcap_setfilter(handle, &fp)==-1){
+        pcap_freecode(&fp);
         printf("%s",pcap_geterr(handle));
         searchAP();
     }
@@ -237,6 +248,7 @@ void device::searchAP(){
                 break;
             case 10:
                 choosen = true;
+                pcap_freecode(&fp);
                 break;
             default:
                 break;
@@ -293,6 +305,7 @@ void device::searchAP(){
                 device::choosed = APs[i];
             }
         }
+        
         pcap_freecode(&fp);
         clear();
 
